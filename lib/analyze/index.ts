@@ -1,7 +1,8 @@
 import { computeMetrics } from "./metrics";
 import { runRules } from "./rules";
+import { fetchAiSuggestions } from "./ai";
 import type { Platform } from "./platforms";
-import type { AnalysisResult } from "@/lib/types";
+import type { AnalysisResult, Suggestion } from "@/lib/types";
 
 /** Synchronous and instant — renders before any network call. */
 export function analyzeRules(text: string, platform: Platform): AnalysisResult {
@@ -11,6 +12,15 @@ export function analyzeRules(text: string, platform: Platform): AnalysisResult {
     suggestions: runRules(text, metrics, platform),
     aiAvailable: false,
   };
+}
+
+/** Async, layered on top of the rule output. */
+export async function analyzeAi(
+  text: string,
+  platform: Platform,
+  signal?: AbortSignal
+): Promise<{ suggestions: Suggestion[]; aiAvailable: boolean }> {
+  return fetchAiSuggestions(text, platform, signal);
 }
 
 export { PLATFORMS, PLATFORM_LIST } from "./platforms";

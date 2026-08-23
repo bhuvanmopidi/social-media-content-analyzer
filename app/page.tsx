@@ -4,7 +4,7 @@ import { useState } from "react";
 import Dropzone from "@/components/Dropzone";
 import FileCard from "@/components/FileCard";
 import { extract } from "@/lib/extract";
-import { analyzeRules } from "@/lib/analyze";
+import { analyzeRules, analyzeAi } from "@/lib/analyze";
 import { toUserMessage } from "@/lib/errors";
 import type { AnalysisResult, ExtractionResult, Progress } from "@/lib/types";
 
@@ -34,6 +34,14 @@ export default function Home() {
 
       const analyzed = analyzeRules(extracted.text, "generic");
       setAnalysis(analyzed);
+      const ai = await analyzeAi(extracted.text, "generic");
+      if (ai.suggestions.length) {
+        setAnalysis({
+          ...analyzed,
+          suggestions: [...analyzed.suggestions, ...ai.suggestions],
+          aiAvailable: ai.aiAvailable,
+        });
+      }
 
       console.log("METRICS:", analyzed.metrics);
       console.log("SUGGESTIONS:", analyzed.suggestions);
