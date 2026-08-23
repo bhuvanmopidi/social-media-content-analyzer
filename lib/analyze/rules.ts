@@ -15,7 +15,7 @@ export function runRules(text: string, m: Metrics, platform: Platform): Suggesti
   // — Length —
   if (m.chars > p.maxChars) {
     add("over-limit", "high", "Length",
-      `${m.chars} characters exceeds ${p.label}'s ${p.maxChars} limit. Trim, or split into a thread.`);
+      `${m.chars.toLocaleString()} characters exceeds ${p.label}'s ${p.maxChars.toLocaleString()} limit. Trim, or split into a thread.`);
   } else if (m.chars < 40) {
     add("too-short", "medium", "Length",
       "Very short posts give the algorithm little to work with. Add context or a specific detail.");
