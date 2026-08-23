@@ -1,6 +1,6 @@
 import { computeMetrics } from "./metrics";
 import { runRules } from "./rules";
-import { fetchAiSuggestions } from "./ai";
+import { fetchAiSuggestions, type AiReason } from "./ai";
 import type { Platform } from "./platforms";
 import type { AnalysisResult, Suggestion } from "@/lib/types";
 
@@ -19,9 +19,10 @@ export async function analyzeAi(
   text: string,
   platform: Platform,
   signal?: AbortSignal
-): Promise<{ suggestions: Suggestion[]; aiAvailable: boolean }> {
+): Promise<{ suggestions: Suggestion[]; aiAvailable: boolean; reason?: AiReason }> {
   return fetchAiSuggestions(text, platform, signal);
 }
 
 export { PLATFORMS, PLATFORM_LIST } from "./platforms";
 export type { Platform } from "./platforms";
+export type { AiReason } from "./ai";

@@ -3,23 +3,65 @@
 import { useState } from "react";
 import Dropzone from "@/components/Dropzone";
 import FileCard from "@/components/FileCard";
+import ProgressBar from "@/components/ProgressBar";
+import MetricsBar from "@/components/MetricsBar";
+import TextPanel from "@/components/TextPanel";
+import SuggestionList from "@/components/SuggestionList";
 import { extract } from "@/lib/extract";
-import { analyzeRules, analyzeAi } from "@/lib/analyze";
+import { analyzeRules, analyzeAi, PLATFORM_LIST, type Platform } from "@/lib/analyze";
 import { toUserMessage } from "@/lib/errors";
-import type { AnalysisResult, ExtractionResult, Progress } from "@/lib/types";
+import type { AnalysisResult, ExtractionResult, Progress, Suggestion } from "@/lib/types";
 
 export default function Home() {
   const [file, setFile] = useState<File | null>(null);
+  const [platform, setPlatform] = useState<Platform>("generic");
   const [progress, setProgress] = useState<Progress | null>(null);
   const [result, setResult] = useState<ExtractionResult | null>(null);
   const [analysis, setAnalysis] = useState<AnalysisResult | null>(null);
+  const [aiPending, setAiPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [aiCache, setAiCache] = useState<Record<string, Suggestion[]>>({});
+  const [aiReason, setAiReason] = useState<string | null>(null);
 
   function reset() {
     setFile(null);
     setResult(null);
     setAnalysis(null);
     setError(null);
+    setAiCache({});
+  }
+
+  /** Rules render instantly; AI suggestions arrive after and append. */
+    /** Rules render instantly; AI rewrites are fetched once per platform and cached. */
+  async function analyze(text: string, target: Platform) {
+    const rules = analyzeRules(text, target);
+    const order = { high: 0, medium: 1, low: 2 };
+
+    const merge = (ai: Suggestion[]) => ({
+      ...rules,
+      suggestions: [...rules.suggestions, ...ai].sort(
+        (a, b) => order[a.severity] - order[b.severity]
+      ),
+      aiAvailable: true,
+    });
+
+    const cached = aiCache[target];
+    if (cached) {
+      setAnalysis(merge(cached));
+      return;
+    }
+
+    setAnalysis(rules);
+
+    setAiPending(true);
+    const ai = await analyzeAi(text, target);
+    setAiPending(false);
+    setAiReason(ai.reason ?? null);
+
+    if (ai.suggestions.length) {
+      setAiCache((c) => ({ ...c, [target]: ai.suggestions }));
+      setAnalysis(merge(ai.suggestions));
+    }
   }
 
   async function handleFile(f: File) {
@@ -27,24 +69,12 @@ export default function Home() {
     setResult(null);
     setAnalysis(null);
     setError(null);
+    setAiCache({});
 
     try {
       const extracted = await extract(f, setProgress);
       setResult(extracted);
-
-      const analyzed = analyzeRules(extracted.text, "generic");
-      setAnalysis(analyzed);
-      const ai = await analyzeAi(extracted.text, "generic");
-      if (ai.suggestions.length) {
-        setAnalysis({
-          ...analyzed,
-          suggestions: [...analyzed.suggestions, ...ai.suggestions],
-          aiAvailable: ai.aiAvailable,
-        });
-      }
-
-      console.log("METRICS:", analyzed.metrics);
-      console.log("SUGGESTIONS:", analyzed.suggestions);
+      await analyze(extracted.text, platform);
     } catch (e) {
       setError(toUserMessage(e));
     } finally {
@@ -52,81 +82,80 @@ export default function Home() {
     }
   }
 
-  return (
-    <main className="mx-auto min-h-screen max-w-3xl px-6 py-16">
-      <h1 className="text-2xl font-semibold tracking-tight">
-        Social Media Content Analyzer
-      </h1>
-      <p className="mt-2 text-neutral-600">
-        Upload a post as a PDF or screenshot to extract its text and get engagement
-        suggestions.
-      </p>
+  // Re-runs analysis on the already-extracted text — no re-extraction needed.
+  function changePlatform(next: Platform) {
+    setPlatform(next);
+    if (result) analyze(result.text, next);
+  }
 
-      <div className="mt-8 space-y-4">
+  return (
+    <main className="mx-auto min-h-screen max-w-6xl px-6 py-16 md:px-10">
+      <header className="max-w-xl">
+        <h1 className="text-[1.75rem] font-medium tracking-tight">
+          Social Media Content Analyzer
+        </h1>
+        <p className="mt-2 leading-relaxed text-[var(--ink-muted)]">
+          Upload a post as a PDF or a screenshot. The text is extracted in your
+          browser — nothing is uploaded or stored — and analysed for engagement.
+        </p>
+      </header>
+
+      <div className="mt-10 max-w-xl space-y-4">
         {file ? (
           <FileCard file={file} onRemove={reset} busy={!!progress} />
         ) : (
           <Dropzone onFile={handleFile} />
         )}
 
-        {progress && (
-          <div className="rounded-lg border border-neutral-200 p-4">
-            <p className="text-sm text-neutral-600">{progress.detail}</p>
-            <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-neutral-100">
-              <div
-                className="h-full bg-neutral-900 transition-all duration-200"
-                style={{ width: `${progress.pct}%` }}
-              />
-            </div>
-          </div>
-        )}
+        {progress && <ProgressBar progress={progress} />}
 
         {error && (
-          <p role="alert" className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
+          <p
+            role="alert"
+            className="border-l-2 border-[var(--high)] bg-white px-4 py-3 text-sm"
+          >
             {error}
           </p>
         )}
+      </div>
 
-        {result && (
-          <div className="space-y-4">
-            <div className="flex flex-wrap gap-3 text-xs text-neutral-500">
-              <span>Source: {result.source}</span>
-              <span>Pages: {result.pages}</span>
-              {result.confidence !== undefined && (
-                <span>Confidence: {Math.round(result.confidence * 100)}%</span>
-              )}
-              <span>{result.durationMs}ms</span>
-            </div>
-
-            <pre className="max-h-96 overflow-auto whitespace-pre-wrap rounded-lg border border-neutral-200 bg-neutral-50 p-4 text-sm">
-              {result.text}
-            </pre>
-          </div>
-        )}
-
-        {analysis && (
-          <div className="space-y-2">
-            <h2 className="text-sm font-semibold text-neutral-900">
-              {analysis.suggestions.length} suggestion
-              {analysis.suggestions.length === 1 ? "" : "s"}
-            </h2>
-            {analysis.suggestions.map((s) => (
-              <div
-                key={s.id}
-                className="rounded-lg border border-neutral-200 px-4 py-3 text-sm"
+      {result && analysis && (
+        <div className="mt-12">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-[0.6875rem] uppercase tracking-wide text-[var(--ink-faint)]">
+              Analysing for
+            </span>
+            {PLATFORM_LIST.map((p) => (
+              <button
+                key={p.id}
+                onClick={() => changePlatform(p.id)}
+                className={`rounded-full px-3 py-1 text-xs transition-colors ${
+                  platform === p.id
+                    ? "bg-[var(--ink)] text-white"
+                    : "bg-white text-[var(--ink-muted)] hover:text-[var(--ink)]"
+                }`}
               >
-                <div className="flex items-center gap-2">
-                  <span className="text-xs font-semibold uppercase text-neutral-500">
-                    {s.type}
-                  </span>
-                  <span className="text-xs text-neutral-400">{s.severity}</span>
-                </div>
-                <p className="mt-1 text-neutral-700">{s.message}</p>
-              </div>
+                {p.label}
+              </button>
             ))}
           </div>
-        )}
-      </div>
+
+          <div className="mt-5">
+            <MetricsBar metrics={analysis.metrics} confidence={result.confidence} />
+          </div>
+
+          <div className="mt-10 grid gap-12 md:grid-cols-[1fr_22rem]">
+            <TextPanel result={result} />
+            <aside>
+              <SuggestionList
+                suggestions={analysis.suggestions}
+                aiPending={aiPending}
+                aiReason={aiReason}
+              />
+            </aside>
+          </div>
+        </div>
+      )}
     </main>
   );
 }
