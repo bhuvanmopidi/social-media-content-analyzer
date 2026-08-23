@@ -4,15 +4,20 @@ import type { Progress } from "@/lib/types";
 
 pdfjs.GlobalWorkerOptions.workerSrc = "/pdf.worker.min.mjs";
 
-/** Below this many chars per page, we assume there's no text layer. */
+/** Below this many chars, we assume a page has no text layer. */
 const TEXT_LAYER_THRESHOLD = 50;
 
-export interface PdfTextResult {
+export interface PdfPage {
+  page: number;
   text: string;
-  pages: number;
-  /** True when the PDF appears to be scanned and should be routed to OCR. */
   needsOcr: boolean;
-  /** Kept open for the OCR fallback in Phase 4. */
+}
+
+export interface PdfTextResult {
+  pages: PdfPage[];
+  pageCount: number;
+  /** True when at least one page has no usable text layer. */
+  needsOcr: boolean;
   doc: pdfjs.PDFDocumentProxy;
   loadingTask: pdfjs.PDFDocumentLoadingTask;
 }
@@ -37,12 +42,22 @@ export async function extractPdfText(
     const page = await doc.getPage(n);
     const content = await page.getTextContent();
     pageTexts.push(reconstructLayout(content.items as TextItem[]));
+    page.cleanup();
   }
 
-  const text = pageTexts.join("\n\n").trim();
-  const avgPerPage = text.length / doc.numPages;
+    const pages: PdfPage[] = pageTexts.map((text, i) => ({
+    page: i + 1,
+    text,
+    needsOcr: text.trim().length < TEXT_LAYER_THRESHOLD,
+  }));
 
-  return { text, pages: doc.numPages, needsOcr: avgPerPage < TEXT_LAYER_THRESHOLD, doc, loadingTask };;;
+  return {
+    pages,
+    pageCount: doc.numPages,
+    needsOcr: pages.some((p) => p.needsOcr),
+    doc,
+    loadingTask,
+  };
 }
 
 /**

@@ -22,13 +22,19 @@ export interface Metrics {
   chars: number;
   words: number;
   sentences: number;
+  paragraphs: number;
+  longestParagraph: number;
+  avgWordsPerSentence: number;
   hashtags: string[];
   mentions: string[];
   emojis: number;
   links: number;
-  readability: number;   // Flesch reading ease
-  hookLength: number;    // chars in first line
+  questions: number;
+  allCaps: number;
+  readability: number;
+  hookLength: number;
   hasCTA: boolean;
+  readTimeSec: number;
 }
 
 export type Severity = "high" | "medium" | "low";
