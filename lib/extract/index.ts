@@ -29,5 +29,22 @@ export async function extract(
     }
   }
 
-  throw new Error("IMAGE_OCR_NOT_IMPLEMENTED"); // Phase 3
+  onProgress?.({ stage: "reading", pct: 0, detail: "Preparing image" });
+
+  const { preprocessImage } = await import("./preprocess");
+  const { runOcr } = await import("./ocr");
+
+  const { canvas } = await preprocessImage(file);
+  const { text, confidence } = await runOcr(canvas, onProgress);
+
+  if (!text.trim()) throw new Error("NO_TEXT_FOUND");
+
+  return {
+    filename: file.name,
+    source: "image-ocr",
+    text,
+    pages: 1,
+    confidence,
+    durationMs: Math.round(performance.now() - started),
+  };
 }
