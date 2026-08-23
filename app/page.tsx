@@ -156,6 +156,9 @@ export default function Home() {
           </div>
         </div>
       )}
+      <footer className="mt-20 border-t border-[var(--rule)] pt-6 text-xs text-[var(--ink-faint)]">
+  Files are processed entirely in your browser. Nothing is uploaded or stored.
+</footer>
     </main>
   );
 }
